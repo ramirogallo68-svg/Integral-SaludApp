@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeAll } from 'vitest'
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { describe, it, expect } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
 
 // IDs fijos del seed para validación precisa
 const CLINICA_A_ID = 'a0000000-0000-0000-0000-00000000000a'
 const CLINICA_B_ID = 'b0000000-0000-0000-0000-00000000000b'
-const MEDICO_A1_USER_ID = 'a2222222-2222-2222-2222-222222222222'
+// const MEDICO_A1_USER_ID = 'a2222222-2222-2222-2222-222222222222'
 
 // Credenciales
 const supabaseUrl = 'https://rfcclxmprlnbupeuvard.supabase.co'
@@ -16,7 +16,7 @@ describe('Multi-tenant Isolation Tests', () => {
 
     const login = async (email: string) => {
         const client = createTestClient()
-        const { data, error } = await client.auth.signInWithPassword({
+        const { error } = await client.auth.signInWithPassword({
             email,
             password: 'password123'
         })

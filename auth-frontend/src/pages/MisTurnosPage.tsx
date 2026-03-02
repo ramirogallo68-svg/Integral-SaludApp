@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase, Turno, Medico } from '../lib/supabase'
+import { supabase, Turno } from '../lib/supabase'
 import { Link } from 'react-router-dom'
 
 export function MisTurnosPage() {
