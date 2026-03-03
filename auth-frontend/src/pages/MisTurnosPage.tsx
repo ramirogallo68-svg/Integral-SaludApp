@@ -11,8 +11,9 @@ export function MisTurnosPage() {
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
 
     const getRangeText = () => {
-        const start = new Date(filterDate)
-        const end = new Date(filterDate)
+        const [year, month, day] = filterDate.split('-').map(Number)
+        const start = new Date(year, month - 1, day)
+        const end = new Date(year, month - 1, day)
         end.setDate(start.getDate() + 7)
         return `Mostrando turnos del ${start.toLocaleDateString()} al ${end.toLocaleDateString()}`
     }
@@ -36,19 +37,16 @@ export function MisTurnosPage() {
             if (medicoError || !medico) throw medicoError || new Error('Perfil de médico no encontrado')
 
             // 2. Obtener turnos (Rango Semanal)
-            const startDate = new Date(filterDate)
-            const endDate = new Date(filterDate)
-            endDate.setDate(startDate.getDate() + 7)
-
-            const startDateStr = startDate.toISOString().split('T')[0]
-            const endDateStr = endDate.toISOString().split('T')[0]
+            const [year, month, day] = filterDate.split('-').map(Number)
+            const startDate = new Date(year, month - 1, day, 0, 0, 0)
+            const endDate = new Date(year, month - 1, day + 7, 23, 59, 59)
 
             const { data, error } = await supabase
                 .from('turnos')
                 .select('*, paciente:pacientes(*)')
                 .eq('medico_id', medico.id)
-                .gte('fecha_hora', `${startDateStr}T00:00:00`)
-                .lte('fecha_hora', `${endDateStr}T23:59:59`)
+                .gte('fecha_hora', startDate.toISOString())
+                .lte('fecha_hora', endDate.toISOString())
                 .order('fecha_hora', { ascending: true })
 
             if (error) throw error

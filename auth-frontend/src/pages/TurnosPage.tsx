@@ -49,19 +49,16 @@ export function TurnosPage() {
         setLoading(true)
 
         // Calcular fin de rango (Fecha inicio + 7 días)
-        const startDate = new Date(filtroFecha)
-        const endDate = new Date(filtroFecha)
-        endDate.setDate(startDate.getDate() + 7)
-
-        const startDateStr = startDate.toISOString().split('T')[0]
-        const endDateStr = endDate.toISOString().split('T')[0]
+        const [year, month, day] = filtroFecha.split('-').map(Number)
+        const startDate = new Date(year, month - 1, day, 0, 0, 0)
+        const endDate = new Date(year, month - 1, day + 7, 23, 59, 59)
 
         let query = supabase
             .from('turnos')
             .select('*, medico:medicos(*, usuario:usuarios(nombre_completo)), paciente:pacientes(*)')
             .eq('clinic_id', usuario?.clinic_id)
-            .gte('fecha_hora', `${startDateStr}T00:00:00`)
-            .lte('fecha_hora', `${endDateStr}T23:59:59`)
+            .gte('fecha_hora', startDate.toISOString())
+            .lte('fecha_hora', endDate.toISOString())
             .order('fecha_hora', { ascending: true })
 
         if (filtroMedico) {
@@ -79,10 +76,14 @@ export function TurnosPage() {
         if (!usuario?.clinic_id) return
         setLoading(true)
 
+        // Convertir la fecha local del input HTML (YYYY-MM-DDTHH:mm) a ISO con offset real
+        const localDate = new Date(formData.fecha_hora)
+
         const payload = {
             ...formData,
+            fecha_hora: localDate.toISOString(),
             clinic_id: usuario.clinic_id,
-            duracion_minutos: 30 // Valor por defecto hardcodeado por ahora
+            duracion_minutos: 30
         }
 
         if (editingTurno) {
@@ -130,10 +131,20 @@ export function TurnosPage() {
             })
         } else {
             setEditingTurno(null)
+            // Para el valor por defecto, usamos la fecha de inicio del filtro a las 09:00 local
+            const [year, month, day] = filtroFecha.split('-').map(Number)
+            const defaultDate = new Date(year, month - 1, day, 9, 0)
+            // Formato YYYY-MM-DDTHH:mm para datetime-local
+            const yearStr = defaultDate.getFullYear()
+            const monthStr = String(defaultDate.getMonth() + 1).padStart(2, '0')
+            const dayStr = String(defaultDate.getDate()).padStart(2, '0')
+            const hoursStr = String(defaultDate.getHours()).padStart(2, '0')
+            const minsStr = String(defaultDate.getMinutes()).padStart(2, '0')
+
             setFormData({
                 paciente_id: '',
                 medico_id: filtroMedico || '',
-                fecha_hora: `${filtroFecha}T09:00`,
+                fecha_hora: `${yearStr}-${monthStr}-${dayStr}T${hoursStr}:${minsStr}`,
                 motivo_consulta: '',
                 estado: 'PENDIENTE'
             })
@@ -158,8 +169,9 @@ export function TurnosPage() {
     }
 
     const getRangeText = () => {
-        const start = new Date(filtroFecha)
-        const end = new Date(filtroFecha)
+        const [year, month, day] = filtroFecha.split('-').map(Number)
+        const start = new Date(year, month - 1, day)
+        const end = new Date(year, month - 1, day)
         end.setDate(start.getDate() + 7)
         return `Mostrando turnos del ${start.toLocaleDateString()} al ${end.toLocaleDateString()}`
     }
