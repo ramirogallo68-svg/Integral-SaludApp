@@ -3,6 +3,7 @@ import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { Link } from 'react-router-dom'
+import { getLocalDayRange } from '../lib/dateUtils'
 
 interface ClinicStats {
     totalMedicos: number
@@ -27,7 +28,7 @@ export function AdminDashboard() {
 
         const fetchStats = async () => {
             try {
-                const hoy = new Date().toISOString().split('T')[0]
+                const { start: hoyInicio, end: hoyFin } = getLocalDayRange(new Date())
 
                 const [
                     { count: medicosCount },
@@ -40,8 +41,8 @@ export function AdminDashboard() {
                     supabase.from('turnos')
                         .select('*', { count: 'exact', head: true })
                         .eq('clinic_id', usuario.clinic_id)
-                        .gte('fecha_hora', `${hoy}T00:00:00`)
-                        .lte('fecha_hora', `${hoy}T23:59:59`),
+                        .gte('fecha_hora', hoyInicio)
+                        .lte('fecha_hora', hoyFin),
                     supabase.from('especialidades').select('*', { count: 'exact', head: true }).eq('clinic_id', usuario.clinic_id)
                 ])
 

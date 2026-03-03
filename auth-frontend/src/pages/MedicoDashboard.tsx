@@ -3,6 +3,7 @@ import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase, Turno, Medico } from '../lib/supabase'
 import { Link } from 'react-router-dom'
+import { getLocalDayRange, getMondayOf, getWeeklyRange } from '../lib/dateUtils'
 
 interface MedicoStats {
     turnosHoy: number
@@ -48,10 +49,9 @@ export function MedicoDashboard() {
 
         // 2. Obtener estadísticas y turnos
         const now = new Date()
-        const hoy = now.toISOString().split('T')[0]
-        const finSemana = new Date(now)
-        finSemana.setDate(now.getDate() + 7)
-        const finSemanaStr = finSemana.toISOString().split('T')[0]
+        const { start: hoyInicio, end: hoyFin } = getLocalDayRange(now)
+        const lunes = getMondayOf(now)
+        const { start: semanaInicio, end: semanaFin } = getWeeklyRange(lunes)
 
         const [
             { count: totalHoy },
@@ -60,12 +60,12 @@ export function MedicoDashboard() {
             { data: turnosData },
             { data: pacientesUnicos }
         ] = await Promise.all([
-            supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('medico_id', medico.id).gte('fecha_hora', `${hoy}T00:00:00`).lte('fecha_hora', `${hoy}T23:59:59`),
+            supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('medico_id', medico.id).gte('fecha_hora', hoyInicio).lte('fecha_hora', hoyFin),
             supabase.from('turnos').select('*', { count: 'exact', head: true }).eq('medico_id', medico.id).eq('estado', 'COMPLETADO'),
             supabase.from('turnos').select('*', {
                 count: 'exact', head: true
             }).eq('medico_id', medico.id).eq('estado', 'PENDIENTE'),
-            supabase.from('turnos').select('*, paciente:pacientes(*)').eq('medico_id', medico.id).gte('fecha_hora', `${hoy}T00:00:00`).lte('fecha_hora', `${finSemanaStr}T23:59:59`).order('fecha_hora'),
+            supabase.from('turnos').select('*, paciente:pacientes(*)').eq('medico_id', medico.id).gte('fecha_hora', semanaInicio).lte('fecha_hora', semanaFin).order('fecha_hora'),
             supabase.from('turnos').select('paciente_id').eq('medico_id', medico.id)
         ])
 

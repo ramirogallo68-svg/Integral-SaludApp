@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase, Turno, Medico, Paciente } from '../lib/supabase'
+import { getMondayOf, getWeeklyRange, formatDateForInput } from '../lib/dateUtils'
 
 export function TurnosPage() {
     const { usuario } = useAuth()
@@ -12,8 +13,8 @@ export function TurnosPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingTurno, setEditingTurno] = useState<Turno | null>(null)
 
-    // Filtros
-    const [filtroFecha, setFiltroFecha] = useState(new Date().toISOString().split('T')[0])
+    // Filtros - Inicializar con el lunes de esta semana
+    const [filtroFecha, setFiltroFecha] = useState(formatDateForInput(getMondayOf(new Date())))
     const [filtroMedico, setFiltroMedico] = useState('')
 
     const [formData, setFormData] = useState({
@@ -48,17 +49,19 @@ export function TurnosPage() {
     const fetchTurnos = async () => {
         setLoading(true)
 
-        // Calcular fin de rango (Fecha inicio + 7 días)
         const [year, month, day] = filtroFecha.split('-').map(Number)
-        const startDate = new Date(year, month - 1, day, 0, 0, 0)
-        const endDate = new Date(year, month - 1, day + 7, 23, 59, 59)
+        // Usamos el día seleccionado como base, pero el plan dice Monday-start
+        // Para que sea consistente, si el usuario elige un día, mostramos la semana de ese lunes
+        const baseDate = new Date(year, month - 1, day)
+        const lunes = getMondayOf(baseDate)
+        const { start, end } = getWeeklyRange(lunes)
 
         let query = supabase
             .from('turnos')
             .select('*, medico:medicos(*, usuario:usuarios(nombre_completo)), paciente:pacientes(*)')
             .eq('clinic_id', usuario?.clinic_id)
-            .gte('fecha_hora', startDate.toISOString())
-            .lte('fecha_hora', endDate.toISOString())
+            .gte('fecha_hora', start)
+            .lte('fecha_hora', end)
             .order('fecha_hora', { ascending: true })
 
         if (filtroMedico) {
@@ -134,17 +137,16 @@ export function TurnosPage() {
             // Para el valor por defecto, usamos la fecha de inicio del filtro a las 09:00 local
             const [year, month, day] = filtroFecha.split('-').map(Number)
             const defaultDate = new Date(year, month - 1, day, 9, 0)
-            // Formato YYYY-MM-DDTHH:mm para datetime-local
-            const yearStr = defaultDate.getFullYear()
-            const monthStr = String(defaultDate.getMonth() + 1).padStart(2, '0')
-            const dayStr = String(defaultDate.getDate()).padStart(2, '0')
+
+            // Reutilizamos formatDateForInput para la parte de la fecha
+            const datePart = formatDateForInput(defaultDate)
             const hoursStr = String(defaultDate.getHours()).padStart(2, '0')
             const minsStr = String(defaultDate.getMinutes()).padStart(2, '0')
 
             setFormData({
                 paciente_id: '',
                 medico_id: filtroMedico || '',
-                fecha_hora: `${yearStr}-${monthStr}-${dayStr}T${hoursStr}:${minsStr}`,
+                fecha_hora: `${datePart}T${hoursStr}:${minsStr}`,
                 motivo_consulta: '',
                 estado: 'PENDIENTE'
             })
@@ -170,10 +172,10 @@ export function TurnosPage() {
 
     const getRangeText = () => {
         const [year, month, day] = filtroFecha.split('-').map(Number)
-        const start = new Date(year, month - 1, day)
-        const end = new Date(year, month - 1, day)
-        end.setDate(start.getDate() + 7)
-        return `Mostrando turnos del ${start.toLocaleDateString()} al ${end.toLocaleDateString()}`
+        const lunes = getMondayOf(new Date(year, month - 1, day))
+        const { start, end } = getWeeklyRange(lunes)
+
+        return `Mostrando turnos del ${new Date(start).toLocaleDateString()} al ${new Date(end).toLocaleDateString()}`
     }
 
     return (

@@ -3,19 +3,20 @@ import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase, Turno } from '../lib/supabase'
 import { Link } from 'react-router-dom'
+import { getMondayOf, getWeeklyRange, formatDateForInput } from '../lib/dateUtils'
 
 export function MisTurnosPage() {
     const { usuario } = useAuth()
     const [turnos, setTurnos] = useState<Turno[]>([])
     const [loading, setLoading] = useState(true)
-    const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
+    const [filterDate, setFilterDate] = useState(formatDateForInput(getMondayOf(new Date())))
 
     const getRangeText = () => {
         const [year, month, day] = filterDate.split('-').map(Number)
-        const start = new Date(year, month - 1, day)
-        const end = new Date(year, month - 1, day)
-        end.setDate(start.getDate() + 7)
-        return `Mostrando turnos del ${start.toLocaleDateString()} al ${end.toLocaleDateString()}`
+        const baseDate = new Date(year, month - 1, day)
+        const lunes = getMondayOf(baseDate)
+        const { start, end } = getWeeklyRange(lunes)
+        return `Mostrando turnos del ${new Date(start).toLocaleDateString()} al ${new Date(end).toLocaleDateString()}`
     }
 
     useEffect(() => {
@@ -36,17 +37,18 @@ export function MisTurnosPage() {
 
             if (medicoError || !medico) throw medicoError || new Error('Perfil de médico no encontrado')
 
-            // 2. Obtener turnos (Rango Semanal)
+            // 2. Obtener turnos (Rango Semanal - Siempre empezando en Lunes)
             const [year, month, day] = filterDate.split('-').map(Number)
-            const startDate = new Date(year, month - 1, day, 0, 0, 0)
-            const endDate = new Date(year, month - 1, day + 7, 23, 59, 59)
+            const baseDate = new Date(year, month - 1, day)
+            const lunes = getMondayOf(baseDate)
+            const { start, end } = getWeeklyRange(lunes)
 
             const { data, error } = await supabase
                 .from('turnos')
                 .select('*, paciente:pacientes(*)')
                 .eq('medico_id', medico.id)
-                .gte('fecha_hora', startDate.toISOString())
-                .lte('fecha_hora', endDate.toISOString())
+                .gte('fecha_hora', start)
+                .lte('fecha_hora', end)
                 .order('fecha_hora', { ascending: true })
 
             if (error) throw error
