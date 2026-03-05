@@ -33,8 +33,14 @@ serve(async (req) => {
             throw new Error('No autorizado: Token inválido')
         }
 
-        // 2. Verificar rol en la base de datos
-        const { data: profile, error: profileError } = await supabaseClient
+        // Cliente Admin para acciones privilegiadas
+        const supabaseAdmin = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        )
+
+        // 2. Verificar rol en la base de datos (Usamos supabaseAdmin para bypass de RLS)
+        const { data: profile, error: profileError } = await supabaseAdmin
             .from('usuarios')
             .select('rol')
             .eq('auth_user_id', user.id)
@@ -42,9 +48,12 @@ serve(async (req) => {
 
         if (profileError || profile?.rol !== 'SUPER_ADMIN') {
             console.error('Acceso denegado. Rol:', profile?.rol, 'Error DB:', profileError?.message)
-            return new Response(JSON.stringify({ error: 'Prohibido: Solo Super Admin' }), {
+            return new Response(JSON.stringify({
+                success: false,
+                error: `Prohibido: Solo Super Admin puede realizar esta acción. (Tu rol: ${profile?.rol || 'No encontrado'})`
+            }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 403,
+                status: 200,
             })
         }
 
@@ -56,12 +65,6 @@ serve(async (req) => {
         // Prioridad: 1. Body del request, 2. Header 'origin', 3. Localhost (fallback)
         const currentOrigin = bodyOrigin || req.headers.get('origin') || 'http://localhost:3000'
         const redirectUrl = `${currentOrigin}/reset-password`
-
-        // Cliente Admin para acciones privilegiadas
-        const supabaseAdmin = createClient(
-            Deno.env.get('SUPABASE_URL') ?? '',
-            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        )
 
         if (action === 'invite-user') {
             console.log(`Invitando usuario: ${email}, Rol: ${rol}, Clínica: ${clinic_id}, Redirect: ${redirectUrl}`)
@@ -104,7 +107,7 @@ serve(async (req) => {
                 console.error('ERROR EN RESET_PASSWORD:', JSON.stringify(resetError))
                 return new Response(JSON.stringify({ success: false, error: resetError.message, details: resetError }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    status: 200, // Devolver 200 para que el cliente pueda leer el error
+                    status: 200,
                 })
             }
 
