@@ -104,6 +104,7 @@ export function UsuariosSaaSPage() {
 
     const handleResetPassword = async (email: string) => {
         try {
+            console.log('Iniciando reset de contraseña para:', email);
             const { data, error } = await supabase.functions.invoke('admin-auth', {
                 body: {
                     action: 'reset-password-admin',
@@ -112,13 +113,20 @@ export function UsuariosSaaSPage() {
                 }
             })
 
-            if (error) throw error
-            if (data.error) throw new Error(data.error)
+            if (error) {
+                console.error('Error de invocación (HTTP/Network):', error);
+                throw new Error(`Error de red o servidor Supabase: ${error.message || 'Sin mensaje'}. Status: ${(error as any).status || 'N/A'}`);
+            }
 
-            alert('Correo de recuperación enviado exitosamente')
+            if (data && data.success === false) {
+                console.error('La función devolvió un error lógico:', data.error);
+                throw new Error(data.error || 'Error desconocido en el servidor');
+            }
+
+            alert('Correo de recuperación enviado exitosamente');
         } catch (err: any) {
-            console.error('Error al resetear contraseña:', err.message)
-            alert(`Error: ${err.message}`)
+            console.error('Detalles del error al resetear contraseña:', err);
+            alert(`No se pudo resetear la contraseña.\n\nDetalle: ${err.message || 'Error inesperado'}\n\nPor favor, revisa la consola del navegador para más detalles.`);
         }
     }
 

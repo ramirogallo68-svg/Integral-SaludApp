@@ -8,29 +8,37 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+    // 0. Manejo de CORS
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
+
+    console.log(`Petición recibida: ${req.method} ${req.url}`)
 
     try {
         const authHeader = req.headers.get('Authorization')
         if (!authHeader) {
             console.error('Petición sin header de Autorización')
-            throw new Error('No autorizado: Falta token')
+            return new Response(JSON.stringify({ success: false, error: 'No autorizado: Falta token' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Debug': 'missing-auth' },
+                status: 200
+            })
         }
 
-        // Cliente para validar el token del usuario logueado
+        // Cliente para validar el token
         const supabaseClient = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_ANON_KEY') ?? '',
             { global: { headers: { Authorization: authHeader } } }
         )
 
-        // 1. Obtener el usuario
         const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
         if (userError || !user) {
             console.error('Error al validar usuario:', userError?.message)
-            throw new Error('No autorizado: Token inválido')
+            return new Response(JSON.stringify({ success: false, error: 'No autorizado: Token inválido' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Debug': 'invalid-token' },
+                status: 200
+            })
         }
 
         // Cliente Admin para acciones privilegiadas
@@ -39,7 +47,7 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        // 2. Verificar rol en la base de datos (Usamos supabaseAdmin para bypass de RLS)
+        // 1. Verificar rol
         const { data: profile, error: profileError } = await supabaseAdmin
             .from('usuarios')
             .select('rol')
@@ -47,28 +55,33 @@ serve(async (req) => {
             .single()
 
         if (profileError || profile?.rol !== 'SUPER_ADMIN') {
-            console.error('Acceso denegado. Rol:', profile?.rol, 'Error DB:', profileError?.message)
+            const currentRol = profile?.rol || 'No encontrado'
+            console.error('Acceso denegado. Rol:', currentRol)
             return new Response(JSON.stringify({
                 success: false,
-                error: `Prohibido: Solo Super Admin puede realizar esta acción. (Tu rol: ${profile?.rol || 'No encontrado'})`
+                error: `Acceso denegado: Necesitas ser SUPER_ADMIN. Tu rol actual es: ${currentRol}`
             }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Debug': 'forbidden' },
                 status: 200,
             })
         }
 
-        const body = await req.json()
-        const { action, email, nombre_completo, rol, clinic_id, origin: bodyOrigin } = body
-        console.log(`Ejecutando acción: ${action} para ${email}`)
+        // 2. Extraer body con robustez
+        let body: any = {}
+        try {
+            body = await req.json()
+        } catch (e) {
+            console.warn('No se pudo parsear el JSON del body, usando valores por defecto')
+        }
 
-        // Determinar el origin para las redirecciones
-        // Prioridad: 1. Body del request, 2. Header 'origin', 3. Localhost (fallback)
+        const { action, email, nombre_completo, rol, clinic_id, origin: bodyOrigin } = body
+        console.log(`Acción detectada: ${action} para ${email}`)
+
         const currentOrigin = bodyOrigin || req.headers.get('origin') || 'http://localhost:3000'
         const redirectUrl = `${currentOrigin}/reset-password`
 
         if (action === 'invite-user') {
-            console.log(`Invitando usuario: ${email}, Rol: ${rol}, Clínica: ${clinic_id}, Redirect: ${redirectUrl}`)
-
+            console.log(`Procesando invitación: ${email}, Redirect: ${redirectUrl}`)
             const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
                 redirectTo: redirectUrl,
                 data: {
@@ -79,55 +92,58 @@ serve(async (req) => {
             })
 
             if (inviteError) {
-                console.error('ERROR EN INVITE_USER:', JSON.stringify(inviteError))
-                let errorMessage = inviteError.message
-                if (errorMessage.includes('already been registered')) {
-                    errorMessage = 'El usuario ya está registrado y confirmado. Usa el botón de "Resetear Contraseña" (icono de llave) para que pueda establecer una nueva.'
+                console.error('Error en inviteUserByEmail:', inviteError.message)
+                let msg = inviteError.message
+                if (msg.includes('already been registered')) {
+                    msg = 'El usuario ya existe y está confirmado. Intenta "Resetear Contraseña" si necesita ayuda para ingresar.'
                 }
-                return new Response(JSON.stringify({ success: false, error: errorMessage, details: inviteError }), {
+                return new Response(JSON.stringify({ success: false, error: msg }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    status: 200,
+                    status: 200
                 })
             }
 
             return new Response(JSON.stringify({ success: true, user: inviteData.user }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
+                status: 200
             })
         }
 
         if (action === 'reset-password-admin') {
-            console.log(`Enviando mail de recuperación para: ${email}, Redirect: ${redirectUrl}`)
-
+            console.log(`Procesando reset password: ${email}, Redirect: ${redirectUrl}`)
             const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
                 redirectTo: redirectUrl
             })
 
             if (resetError) {
-                console.error('ERROR EN RESET_PASSWORD:', JSON.stringify(resetError))
-                return new Response(JSON.stringify({ success: false, error: resetError.message, details: resetError }), {
+                console.error('Error en resetPasswordForEmail:', resetError.message)
+                return new Response(JSON.stringify({ success: false, error: resetError.message }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    status: 200,
+                    status: 200
                 })
             }
 
             return new Response(JSON.stringify({ success: true }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
+                status: 200
             })
         }
 
-        throw new Error(`Acción no válida: ${action}`)
+        return new Response(JSON.stringify({ success: false, error: `Acción no contemplada: ${action}` }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+        })
 
-    } catch (error: any) {
-        console.error('ERROR CRÍTICO EN FUNCIÓN:', error.message)
+    } catch (criticalError: any) {
+        console.error('ERROR CRÍTICO INESPERADO:', criticalError)
         return new Response(JSON.stringify({
             success: false,
-            error: error.message,
-            stack: error.stack
+            error: `Error interno de la función: ${criticalError.message}`,
+            stack: criticalError.stack
         }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Error': 'true' },
             status: 200,
         })
     }
 })
+
