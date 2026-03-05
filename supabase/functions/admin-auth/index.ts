@@ -69,15 +69,32 @@ serve(async (req) => {
         // 2. Extraer body con robustez
         let body: any = {}
         try {
-            body = await req.json()
+            const bodyText = await req.text()
+            if (bodyText) {
+                body = JSON.parse(bodyText)
+            }
         } catch (e) {
-            console.warn('No se pudo parsear el JSON del body, usando valores por defecto')
+            console.warn('No se pudo parsear el JSON del body:', e.message)
         }
 
         const { action, email, nombre_completo, rol, clinic_id, origin: bodyOrigin } = body
         console.log(`Acción detectada: ${action} para ${email}`)
 
-        const currentOrigin = bodyOrigin || req.headers.get('origin') || 'http://localhost:3000'
+        // Detección de origen ultra robusta
+        const headerOrigin = req.headers.get('origin')
+        const headerReferer = req.headers.get('referer') ? new URL(req.headers.get('referer')!).origin : null
+        const headerForwardedHost = req.headers.get('x-forwarded-host') ? `https://${req.headers.get('x-forwarded-host')}` : null
+
+        const currentOrigin = bodyOrigin || headerOrigin || headerReferer || headerForwardedHost || 'http://localhost:3000'
+
+        console.log('Orígenes detectados:', {
+            body: bodyOrigin,
+            header: headerOrigin,
+            referer: headerReferer,
+            forwarded: headerForwardedHost,
+            final: currentOrigin
+        })
+
         const redirectUrl = `${currentOrigin}/reset-password`
 
         if (action === 'invite-user') {

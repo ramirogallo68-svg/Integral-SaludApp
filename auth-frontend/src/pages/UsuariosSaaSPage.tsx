@@ -123,10 +123,10 @@ export function UsuariosSaaSPage() {
                 throw new Error(data.error || 'Error desconocido en el servidor');
             }
 
-            alert('Correo de recuperación enviado exitosamente');
+            alert(`Correo de recuperación enviado exitosamente.\n\nEl enlace debería redirigir a:\n${window.location.origin}`);
         } catch (err: any) {
-            console.error('Detalles del error al resetear contraseña:', err);
-            alert(`No se pudo resetear la contraseña.\n\nDetalle: ${err.message || 'Error inesperado'}\n\nPor favor, revisa la consola del navegador para más detalles.`);
+            console.error('Error al resetear contraseña:', err);
+            alert(`No se pudo resetear la contraseña.\n\nError: ${err.message || 'Error inesperado'}`);
         }
     }
 
