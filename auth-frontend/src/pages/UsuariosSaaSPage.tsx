@@ -47,7 +47,8 @@ export function UsuariosSaaSPage() {
                     email: formData.email,
                     nombre_completo: formData.nombre_completo,
                     rol: formData.rol,
-                    clinic_id: formData.rol === 'SUPER_ADMIN' ? null : formData.clinic_id
+                    clinic_id: formData.rol === 'SUPER_ADMIN' ? null : formData.clinic_id,
+                    origin: window.location.origin
                 }
             })
 
@@ -86,7 +87,8 @@ export function UsuariosSaaSPage() {
                     email,
                     nombre_completo: user?.nombre_completo,
                     rol: user?.rol,
-                    clinic_id: user?.clinic_id
+                    clinic_id: user?.clinic_id,
+                    origin: window.location.origin
                 }
             })
 
@@ -103,7 +105,11 @@ export function UsuariosSaaSPage() {
     const handleResetPassword = async (email: string) => {
         try {
             const { data, error } = await supabase.functions.invoke('admin-auth', {
-                body: { action: 'reset-password-admin', email }
+                body: {
+                    action: 'reset-password-admin',
+                    email,
+                    origin: window.location.origin
+                }
             })
 
             if (error) throw error

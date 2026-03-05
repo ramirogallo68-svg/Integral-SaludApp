@@ -49,8 +49,13 @@ serve(async (req) => {
         }
 
         const body = await req.json()
-        const { action, email, nombre_completo, rol, clinic_id } = body
+        const { action, email, nombre_completo, rol, clinic_id, origin: bodyOrigin } = body
         console.log(`Ejecutando acción: ${action} para ${email}`)
+
+        // Determinar el origin para las redirecciones
+        // Prioridad: 1. Body del request, 2. Header 'origin', 3. Localhost (fallback)
+        const currentOrigin = bodyOrigin || req.headers.get('origin') || 'http://localhost:3000'
+        const redirectUrl = `${currentOrigin}/reset-password`
 
         // Cliente Admin para acciones privilegiadas
         const supabaseAdmin = createClient(
@@ -59,8 +64,6 @@ serve(async (req) => {
         )
 
         if (action === 'invite-user') {
-            const origin = req.headers.get('origin') || 'http://localhost:3000'
-            const redirectUrl = `${origin}/reset-password`
             console.log(`Invitando usuario: ${email}, Rol: ${rol}, Clínica: ${clinic_id}, Redirect: ${redirectUrl}`)
 
             const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -91,8 +94,6 @@ serve(async (req) => {
         }
 
         if (action === 'reset-password-admin') {
-            const origin = req.headers.get('origin') || 'http://localhost:3000'
-            const redirectUrl = `${origin}/reset-password`
             console.log(`Enviando mail de recuperación para: ${email}, Redirect: ${redirectUrl}`)
 
             const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
