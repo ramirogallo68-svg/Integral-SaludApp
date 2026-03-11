@@ -14,6 +14,7 @@ export function UsuariosSaaSPage() {
         clinic_id: '',
         activo: true
     })
+    const [searchClinic, setSearchClinic] = useState('')
 
     useEffect(() => {
         fetchData()
@@ -133,20 +134,31 @@ export function UsuariosSaaSPage() {
     return (
         <DashboardLayout>
             <div className="py-6">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios SaaS</h1>
                         <p className="mt-1 text-sm text-gray-500">Administra todos los usuarios y sus roles globalmente.</p>
                     </div>
-                    <button
-                        onClick={() => {
-                            setFormData({ email: '', nombre_completo: '', rol: 'ADMIN_CLINICA', clinic_id: clinicas[0]?.id || '', activo: true })
-                            setIsModalOpen(true)
-                        }}
-                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    >
-                        Nuevo Usuario
-                    </button>
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="relative w-full sm:w-64">
+                            <input
+                                type="text"
+                                value={searchClinic}
+                                onChange={(e) => setSearchClinic(e.target.value)}
+                                placeholder="Filtrar usuarios por clínica..."
+                                className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            />
+                        </div>
+                        <button
+                            onClick={() => {
+                                setFormData({ email: '', nombre_completo: '', rol: 'ADMIN_CLINICA', clinic_id: clinicas[0]?.id || '', activo: true })
+                                setIsModalOpen(true)
+                            }}
+                            className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            Nuevo Usuario
+                        </button>
+                    </div>
                 </div>
 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
@@ -158,8 +170,14 @@ export function UsuariosSaaSPage() {
                     ) : (
                         <div className="bg-white shadow overflow-hidden sm:rounded-md">
                             <ul className="divide-y divide-gray-200">
-                                {usuarios.map((user) => (
-                                    <li key={user.id}>
+                                {usuarios
+                                    .filter(user => {
+                                        if (!searchClinic) return true;
+                                        const clinicName = (user as any).clinica?.nombre || '';
+                                        return clinicName.toLowerCase().includes(searchClinic.toLowerCase());
+                                    })
+                                    .map((user) => (
+                                        <li key={user.id}>
                                         <div className="px-4 py-4 sm:px-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center">
