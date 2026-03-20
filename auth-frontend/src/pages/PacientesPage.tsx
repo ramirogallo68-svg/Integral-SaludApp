@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 export function PacientesPage() {
     const { usuario } = useAuth()
     const [pacientes, setPacientes] = useState<Paciente[]>([])
+    const [searchPatientName, setSearchPatientName] = useState('')
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingPaciente, setEditingPaciente] = useState<Paciente | null>(null)
@@ -109,6 +110,10 @@ export function PacientesPage() {
         setEditingPaciente(null)
     }
 
+    const filteredPacientes = pacientes.filter(p =>
+        p.nombre_completo.toLowerCase().includes(searchPatientName.toLowerCase())
+    )
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -119,12 +124,21 @@ export function PacientesPage() {
                             Administra el padrón de pacientes de tu clínica
                         </p>
                     </div>
-                    <button
-                        onClick={() => openModal()}
-                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                    >
-                        Nuevo Paciente
-                    </button>
+                    <div className="flex items-center space-x-4">
+                        <input
+                            type="text"
+                            placeholder="Buscar paciente por nombre..."
+                            value={searchPatientName}
+                            onChange={(e) => setSearchPatientName(e.target.value)}
+                            className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                        <button
+                            onClick={() => openModal()}
+                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                        >
+                            Nuevo Paciente
+                        </button>
+                    </div>
                 </div>
 
                 <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -143,7 +157,7 @@ export function PacientesPage() {
                                 <tr>
                                     <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">Cargando...</td>
                                 </tr>
-                            ) : pacientes.map((p) => (
+                            ) : filteredPacientes.map((p) => (
                                 <tr key={p.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{p.nombre_completo}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.dni}</td>
