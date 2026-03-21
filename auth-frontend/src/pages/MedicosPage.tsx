@@ -7,8 +7,18 @@ export function MedicosPage() {
     const { usuario } = useAuth()
     const [medicos, setMedicos] = useState<Medico[]>([])
     const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
+    const [searchMedico, setSearchMedico] = useState('')
+    const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [errorMsg, setErrorMsg] = useState('')
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(searchMedico)
+        }, 300)
+        return () => clearTimeout(timer)
+    }, [searchMedico])
     const [editingMedico, setEditingMedico] = useState<Medico | null>(null)
     const [formData, setFormData] = useState({
         nombre_completo: '',
@@ -22,27 +32,40 @@ export function MedicosPage() {
         if (usuario?.clinic_id) {
             fetchData()
         }
-    }, [usuario])
+    }, [usuario, debouncedSearch])
 
     const fetchData = async () => {
         setLoading(true)
-        const [medicosRes, especialidadesRes] = await Promise.all([
-            supabase.from('medicos')
-                .select('*, usuario:usuarios(*), especialidad:especialidades(*)')
-                .eq('clinic_id', usuario?.clinic_id),
-            supabase.from('especialidades')
-                .select('*')
+        setErrorMsg('')
+        try {
+            let medicosQuery = supabase.from('medicos')
+                .select('*, usuario:usuarios!inner(*), especialidad:especialidades(*)')
                 .eq('clinic_id', usuario?.clinic_id)
-                .eq('activa', true)
-        ])
 
-        if (medicosRes.error) console.error('Error fetching medicos:', medicosRes.error)
-        else setMedicos(medicosRes.data || [])
+            if (debouncedSearch.trim() !== '') {
+                medicosQuery = medicosQuery.ilike('usuarios.nombre_completo', `%${debouncedSearch}%`)
+            }
 
-        if (especialidadesRes.error) console.error('Error fetching especialidades:', especialidadesRes.error)
-        else setEspecialidades(especialidadesRes.data || [])
+            const [medicosRes, especialidadesRes] = await Promise.all([
+                medicosQuery,
+                supabase.from('especialidades')
+                    .select('*')
+                    .eq('clinic_id', usuario?.clinic_id)
+                    .eq('activa', true)
+            ])
 
-        setLoading(false)
+            if (medicosRes.error) throw medicosRes.error
+            else setMedicos(medicosRes.data || [])
+
+            if (especialidadesRes.error) throw especialidadesRes.error
+            else setEspecialidades(especialidadesRes.data || [])
+
+        } catch (error) {
+            console.error('Error fetching data:', error)
+            setErrorMsg('Error al cargar profesionales')
+        } finally {
+            setLoading(false)
+        }
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -180,13 +203,32 @@ export function MedicosPage() {
                             Administra el staff médico/profesional de tu clínica
                         </p>
                     </div>
-                    <button
-                        onClick={() => openModal()}
-                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
-                    >
-                        Nuevo Profesional
-                    </button>
+                    <div className="flex items-center space-x-4">
+                        <input
+                            type="text"
+                            placeholder="Buscar médico por nombre..."
+                            value={searchMedico}
+                            onChange={(e) => setSearchMedico(e.target.value)}
+                            className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        />
+                        <button
+                            onClick={() => openModal()}
+                            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                        >
+                            Nuevo Profesional
+                        </button>
+                    </div>
                 </div>
+
+                {errorMsg && (
+                    <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                        <div className="flex">
+                            <div className="ml-3">
+                                <p className="text-sm text-red-700">{errorMsg}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -203,6 +245,12 @@ export function MedicosPage() {
                             {loading && medicos.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">Cargando...</td>
+                                </tr>
+                            ) : medicos.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                                        {debouncedSearch ? "No se encontraron profesionales con ese nombre" : "No hay profesionales registrados en esta clínica"}
+                                    </td>
                                 </tr>
                             ) : medicos.map((medico) => (
                                 <tr key={medico.id} className="hover:bg-gray-50">
