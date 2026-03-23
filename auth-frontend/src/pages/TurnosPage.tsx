@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DashboardLayout } from '../components/DashboardLayout'
 import { useAuth } from '../contexts/AuthContext'
-import { supabase, Turno, Medico, Paciente } from '../lib/supabase'
+import { supabase, Turno, Medico, Paciente, Especialidad } from '../lib/supabase'
 import { getMondayOf, getWeeklyRange, formatDateForInput } from '../lib/dateUtils'
 
 export function TurnosPage() {
@@ -9,6 +9,9 @@ export function TurnosPage() {
     const [turnos, setTurnos] = useState<Turno[]>([])
     const [medicos, setMedicos] = useState<Medico[]>([])
     const [pacientes, setPacientes] = useState<Paciente[]>([])
+    const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
+    const [selectedEspecialidad, setSelectedEspecialidad] = useState('')
+    const [medicosFiltrados, setMedicosFiltrados] = useState<Medico[]>([])
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingTurno, setEditingTurno] = useState<Turno | null>(null)
@@ -38,13 +41,42 @@ export function TurnosPage() {
     }, [filtroFecha, filtroMedico, usuario])
 
     const fetchInitialData = async () => {
-        const [medicosRes, pacientesRes] = await Promise.all([
+        const [medicosRes, pacientesRes, especialidadesRes] = await Promise.all([
             supabase.from('medicos').select('*, usuario:usuarios(nombre_completo)').eq('clinic_id', usuario?.clinic_id).eq('activo', true),
-            supabase.from('pacientes').select('*').eq('clinic_id', usuario?.clinic_id).order('nombre_completo')
+            supabase.from('pacientes').select('*').eq('clinic_id', usuario?.clinic_id).order('nombre_completo'),
+            supabase.from('especialidades').select('*').eq('clinic_id', usuario?.clinic_id).eq('activa', true).order('nombre')
         ])
         if (medicosRes.data) setMedicos(medicosRes.data)
         if (pacientesRes.data) setPacientes(pacientesRes.data)
+        if (especialidadesRes.data) setEspecialidades(especialidadesRes.data)
     }
+
+    const loadMedicosPorEspecialidad = async (especialidadId: string) => {
+        if (!especialidadId) {
+            setMedicosFiltrados([])
+            return
+        }
+        const { data, error } = await supabase
+            .from('medicos')
+            .select('*, usuario:usuarios(nombre_completo)')
+            .eq('clinic_id', usuario?.clinic_id)
+            .eq('activo', true)
+            .eq('especialidad_id', especialidadId)
+
+        if (!error && data) {
+            setMedicosFiltrados(data)
+        } else {
+            setMedicosFiltrados([])
+        }
+    }
+
+    const handleEspecialidadChange = (especialidadId: string) => {
+        setSelectedEspecialidad(especialidadId)
+        setFormData(prev => ({ ...prev, medico_id: '' }))
+        loadMedicosPorEspecialidad(especialidadId)
+    }
+
+
 
     const fetchTurnos = async () => {
         setLoading(true)
@@ -122,7 +154,7 @@ export function TurnosPage() {
         else fetchTurnos()
     }
 
-    const openModal = (turno: Turno | null = null) => {
+    const openModal = async (turno: Turno | null = null) => {
         if (turno) {
             setEditingTurno(turno)
             setFormData({
@@ -132,8 +164,22 @@ export function TurnosPage() {
                 motivo_consulta: turno.motivo_consulta || '',
                 estado: turno.estado
             })
+            
+            const medicoActual = medicos.find(m => m.id === turno.medico_id)
+            if (medicoActual?.especialidad_id) {
+                setSelectedEspecialidad(medicoActual.especialidad_id)
+                loadMedicosPorEspecialidad(medicoActual.especialidad_id)
+            } else {
+                 const { data } = await supabase.from('medicos').select('especialidad_id').eq('id', turno.medico_id).single()
+                 if (data?.especialidad_id) {
+                     setSelectedEspecialidad(data.especialidad_id)
+                     loadMedicosPorEspecialidad(data.especialidad_id)
+                 }
+            }
         } else {
             setEditingTurno(null)
+            setSelectedEspecialidad('')
+            setMedicosFiltrados([])
             // Para el valor por defecto, usamos la fecha de inicio del filtro a las 09:00 local
             const [year, month, day] = filtroFecha.split('-').map(Number)
             const defaultDate = new Date(year, month - 1, day, 9, 0)
@@ -337,15 +383,37 @@ export function TurnosPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">Médico</label>
+                                        <label className="block text-sm font-medium text-gray-700">Especialidad</label>
                                         <select
                                             required
                                             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                            value={selectedEspecialidad}
+                                            onChange={(e) => handleEspecialidadChange(e.target.value)}
+                                        >
+                                            <option value="">Selecciona una especialidad</option>
+                                            {especialidades.map(esp => (
+                                                <option key={esp.id} value={esp.id}>{esp.nombre}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Médico</label>
+                                        <select
+                                            required
+                                            disabled={!selectedEspecialidad}
+                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-100 disabled:text-gray-500"
                                             value={formData.medico_id}
                                             onChange={(e) => setFormData({ ...formData, medico_id: e.target.value })}
                                         >
-                                            <option value="">Selecciona un médico</option>
-                                            {medicos.map(m => (
+                                            <option value="">
+                                                {!selectedEspecialidad 
+                                                    ? 'Selecciona una especialidad primero' 
+                                                    : medicosFiltrados.length === 0 
+                                                        ? 'No hay profesionales disponibles para esta especialidad' 
+                                                        : 'Selecciona un médico'}
+                                            </option>
+                                            {medicosFiltrados.map(m => (
                                                 <option key={m.id} value={m.id}>{m.usuario?.nombre_completo}</option>
                                             ))}
                                         </select>
