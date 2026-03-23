@@ -15,6 +15,7 @@ export function TurnosPage() {
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingTurno, setEditingTurno] = useState<Turno | null>(null)
+    const [horariosOcupados, setHorariosOcupados] = useState<string[]>([])
 
     // Filtros - Inicializar con el lunes de esta semana
     const [filtroFecha, setFiltroFecha] = useState(formatDateForInput(getMondayOf(new Date())))
@@ -78,6 +79,55 @@ export function TurnosPage() {
 
 
 
+    const generarHorarios = () => {
+        const slots = []
+        for (let i = 8; i <= 18; i++) {
+            slots.push(`${String(i).padStart(2, '0')}:00`)
+            slots.push(`${String(i).padStart(2, '0')}:30`)
+        }
+        return slots
+    }
+    const horariosDisponibles = generarHorarios()
+
+    const fetchHorariosOcupados = async (medicoId: string, fechaLocalStr: string) => {
+        if (!usuario?.clinic_id) return
+        
+        const startOfDay = new Date(`${fechaLocalStr}T00:00:00`).toISOString()
+        const endOfDay = new Date(`${fechaLocalStr}T23:59:59`).toISOString()
+
+        const { data, error } = await supabase
+            .from('turnos')
+            .select('id, fecha_hora, estado')
+            .eq('medico_id', medicoId)
+            .eq('clinic_id', usuario.clinic_id)
+            .neq('estado', 'CANCELADO')
+            .gte('fecha_hora', startOfDay)
+            .lte('fecha_hora', endOfDay)
+
+        if (!error && data) {
+            let ocupados = data
+            if (editingTurno && editingTurno.medico_id === medicoId) {
+                ocupados = ocupados.filter(t => t.id !== editingTurno.id)
+            }
+            const horas = ocupados.map(t => {
+                const dateObj = new Date(t.fecha_hora)
+                const h = String(dateObj.getHours()).padStart(2, '0')
+                const m = String(dateObj.getMinutes()).padStart(2, '0')
+                return `${h}:${m}`
+            })
+            setHorariosOcupados(horas)
+        }
+    }
+
+    const fechaSeleccionada = formData.fecha_hora ? formData.fecha_hora.substring(0, 10) : ''
+    useEffect(() => {
+        if (formData.medico_id && fechaSeleccionada) {
+            fetchHorariosOcupados(formData.medico_id, fechaSeleccionada)
+        } else {
+            setHorariosOcupados([])
+        }
+    }, [formData.medico_id, fechaSeleccionada, editingTurno])
+
     const fetchTurnos = async () => {
         setLoading(true)
 
@@ -113,12 +163,37 @@ export function TurnosPage() {
 
         // Convertir la fecha local del input HTML (YYYY-MM-DDTHH:mm) a ISO con offset real
         const localDate = new Date(formData.fecha_hora)
-
         const payload = {
             ...formData,
             fecha_hora: localDate.toISOString(),
             clinic_id: usuario.clinic_id,
             duracion_minutos: 30
+        }
+
+        // TAREA 1 & 4: VALIDACIÓN BACKEND ANTES DE GUARDAR
+        let checkQuery = supabase
+            .from('turnos')
+            .select('id')
+            .eq('medico_id', payload.medico_id)
+            .eq('fecha_hora', payload.fecha_hora)
+            .eq('clinic_id', usuario.clinic_id)
+            .neq('estado', 'CANCELADO')
+            .limit(1)
+            
+        if (editingTurno) checkQuery = checkQuery.neq('id', editingTurno.id)
+
+        const { data: existingTurnos, error: checkError } = await checkQuery
+
+        if (checkError) {
+            alert('Error verificando disponibilidad')
+            setLoading(false)
+            return
+        }
+
+        if (existingTurnos && existingTurnos.length > 0) {
+            alert('El profesional ya tiene un turno en ese horario. El horario seleccionado ya no está disponible. Por favor elige otro.')
+            setLoading(false)
+            return
         }
 
         if (editingTurno) {
@@ -419,16 +494,47 @@ export function TurnosPage() {
                                         </select>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Fecha y Hora</label>
-                                        <input
-                                            type="datetime-local"
-                                            required
-                                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                            value={formData.fecha_hora}
-                                            onChange={(e) => setFormData({ ...formData, fecha_hora: e.target.value })}
-                                        />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Fecha</label>
+                                            <input
+                                                type="date"
+                                                required
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                                value={formData.fecha_hora.substring(0, 10)}
+                                                onChange={(e) => {
+                                                    const timePart = formData.fecha_hora ? formData.fecha_hora.substring(11, 16) : '09:00'
+                                                    setFormData({ ...formData, fecha_hora: `${e.target.value}T${timePart}` })
+                                                }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700">Hora</label>
+                                            <select
+                                                required
+                                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-100 disabled:text-gray-500"
+                                                value={formData.fecha_hora.substring(11, 16)}
+                                                onChange={(e) => {
+                                                    const datePart = formData.fecha_hora ? formData.fecha_hora.substring(0, 10) : ''
+                                                    if (datePart) setFormData({ ...formData, fecha_hora: `${datePart}T${e.target.value}` })
+                                                }}
+                                                disabled={!formData.medico_id || !formData.fecha_hora.substring(0, 10)}
+                                            >
+                                                <option value="">Selecciona horario</option>
+                                                {horariosDisponibles.map(h => {
+                                                    const isOcupado = horariosOcupados.includes(h)
+                                                    return (
+                                                        <option key={h} value={h} disabled={isOcupado}>
+                                                            {h} {isOcupado ? '❌ Ocupado' : '✅ Disponible'}
+                                                        </option>
+                                                    )
+                                                })}
+                                            </select>
+                                        </div>
                                     </div>
+                                    {horariosDisponibles.length > 0 && horariosDisponibles.every(h => horariosOcupados.includes(h)) && formData.medico_id && (
+                                        <p className="text-sm text-red-600 mt-2">No hay disponibilidad para este profesional en la fecha seleccionada</p>
+                                    )}
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">Motivo</label>
