@@ -8,6 +8,9 @@ export function PacientesPage() {
     const { usuario } = useAuth()
     const [pacientes, setPacientes] = useState<Paciente[]>([])
     const [searchPatientName, setSearchPatientName] = useState('')
+    const [selectedObraSocial, setSelectedObraSocial] = useState('Todas')
+    const [obrasSociales, setObrasSociales] = useState<string[]>([])
+    const [debouncedSearch, setDebouncedSearch] = useState('')
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingPaciente, setEditingPaciente] = useState<Paciente | null>(null)
@@ -23,18 +26,55 @@ export function PacientesPage() {
     })
 
     useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchPatientName), 300)
+        return () => clearTimeout(timer)
+    }, [searchPatientName])
+
+    useEffect(() => {
         if (usuario?.clinic_id) {
-            fetchPacientes()
+            fetchObrasSociales()
         }
     }, [usuario])
 
-    const fetchPacientes = async () => {
-        setLoading(true)
+    useEffect(() => {
+        if (usuario?.clinic_id) {
+            fetchPacientes()
+        }
+    }, [usuario, debouncedSearch, selectedObraSocial])
+
+    const fetchObrasSociales = async () => {
+        if (!usuario?.clinic_id) return
         const { data, error } = await supabase
             .from('pacientes')
+            .select('obra_social')
+            .eq('clinic_id', usuario.clinic_id)
+            .not('obra_social', 'is', null)
+            .neq('obra_social', '')
+
+        if (!error && data) {
+            const uniqueObrasSociales = Array.from(new Set(data.map(p => p.obra_social))).sort()
+            setObrasSociales(uniqueObrasSociales as string[])
+        }
+    }
+
+    const fetchPacientes = async () => {
+        if (!usuario?.clinic_id) return
+        setLoading(true)
+        let query = supabase
+            .from('pacientes')
             .select('*')
-            .eq('clinic_id', usuario?.clinic_id)
+            .eq('clinic_id', usuario.clinic_id)
             .order('nombre_completo')
+
+        if (debouncedSearch) {
+            query = query.ilike('nombre_completo', `%${debouncedSearch}%`)
+        }
+
+        if (selectedObraSocial !== 'Todas') {
+            query = query.eq('obra_social', selectedObraSocial)
+        }
+
+        const { data, error } = await query
 
         if (error) console.error('Error fetching pacientes:', error)
         else setPacientes(data || [])
@@ -110,10 +150,6 @@ export function PacientesPage() {
         setEditingPaciente(null)
     }
 
-    const filteredPacientes = pacientes.filter(p =>
-        p.nombre_completo.toLowerCase().includes(searchPatientName.toLowerCase())
-    )
-
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -132,6 +168,27 @@ export function PacientesPage() {
                             onChange={(e) => setSearchPatientName(e.target.value)}
                             className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         />
+                        <select
+                            value={selectedObraSocial}
+                            onChange={(e) => setSelectedObraSocial(e.target.value)}
+                            className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        >
+                            <option value="Todas">Todas (Obra Social)</option>
+                            {obrasSociales.map((os) => (
+                                <option key={os} value={os}>{os}</option>
+                            ))}
+                        </select>
+                        {(searchPatientName || selectedObraSocial !== 'Todas') && (
+                            <button
+                                onClick={() => {
+                                    setSearchPatientName('')
+                                    setSelectedObraSocial('Todas')
+                                }}
+                                className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
                         <button
                             onClick={() => openModal()}
                             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
@@ -157,7 +214,15 @@ export function PacientesPage() {
                                 <tr>
                                     <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">Cargando...</td>
                                 </tr>
-                            ) : filteredPacientes.map((p) => (
+                            ) : pacientes.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                                        {(searchPatientName || selectedObraSocial !== 'Todas') 
+                                            ? "No hay pacientes con los filtros aplicados" 
+                                            : "No hay pacientes registrados aún"}
+                                    </td>
+                                </tr>
+                            ) : pacientes.map((p) => (
                                 <tr key={p.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{p.nombre_completo}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.dni}</td>
