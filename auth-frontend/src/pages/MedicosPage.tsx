@@ -9,6 +9,7 @@ export function MedicosPage() {
     const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
     const [searchMedico, setSearchMedico] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
+    const [selectedEspecialidad, setSelectedEspecialidad] = useState('Todas')
     const [errorMsg, setErrorMsg] = useState('')
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -32,7 +33,7 @@ export function MedicosPage() {
         if (usuario?.clinic_id) {
             fetchData()
         }
-    }, [usuario, debouncedSearch])
+    }, [usuario, debouncedSearch, selectedEspecialidad])
 
     const fetchData = async () => {
         setLoading(true)
@@ -44,6 +45,10 @@ export function MedicosPage() {
 
             if (debouncedSearch.trim() !== '') {
                 medicosQuery = medicosQuery.ilike('usuarios.nombre_completo', `%${debouncedSearch}%`)
+            }
+
+            if (selectedEspecialidad !== 'Todas') {
+                medicosQuery = medicosQuery.eq('especialidad_id', selectedEspecialidad)
             }
 
             const [medicosRes, especialidadesRes] = await Promise.all([
@@ -211,6 +216,27 @@ export function MedicosPage() {
                             onChange={(e) => setSearchMedico(e.target.value)}
                             className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                         />
+                        <select
+                            value={selectedEspecialidad}
+                            onChange={(e) => setSelectedEspecialidad(e.target.value)}
+                            className="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        >
+                            <option value="Todas">Todas (Especialidad)</option>
+                            {especialidades.map((esp) => (
+                                <option key={esp.id} value={esp.id}>{esp.nombre}</option>
+                            ))}
+                        </select>
+                        {(searchMedico || selectedEspecialidad !== 'Todas') && (
+                            <button
+                                onClick={() => {
+                                    setSearchMedico('')
+                                    setSelectedEspecialidad('Todas')
+                                }}
+                                className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
                         <button
                             onClick={() => openModal()}
                             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
@@ -249,7 +275,9 @@ export function MedicosPage() {
                             ) : medicos.length === 0 ? (
                                 <tr>
                                     <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                                        {debouncedSearch ? "No se encontraron profesionales con ese nombre" : "No hay profesionales registrados en esta clínica"}
+                                        {(debouncedSearch || selectedEspecialidad !== 'Todas') 
+                                            ? "No hay profesionales con los filtros aplicados" 
+                                            : "No hay profesionales registrados aún"}
                                     </td>
                                 </tr>
                             ) : medicos.map((medico) => (
